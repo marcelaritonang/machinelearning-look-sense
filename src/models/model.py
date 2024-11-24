@@ -1,138 +1,77 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from typing import Tuple, Dict
 
 class FashionClassifier(nn.Module):
-    def __init__(self, num_classes: int = 10):
-        """
-        Fashion classifier model
-        
-        Args:
-            num_classes: Number of classification classes
-        """
+    def __init__(self, num_classes):
         super(FashionClassifier, self).__init__()
         
         # Feature extraction layers
         self.features = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=3, padding=1),
+            # Block 1: Input(3, 128, 128) -> Output(32, 64, 64)
+            nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
             
-            nn.Conv2d(64, 128, kernel_size=3, padding=1),
+            # Block 2: Input(32, 64, 64) -> Output(64, 32, 32)
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
             
-            nn.Conv2d(128, 256, kernel_size=3, padding=1),
+            # Block 3: Input(64, 32, 32) -> Output(128, 16, 16)
+            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
             
-            nn.Conv2d(256, 512, kernel_size=3, padding=1),
+            # Block 4: Input(128, 16, 16) -> Output(128, 8, 8)
+            nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
+
+            # Global Average Pooling: Input(128, 8, 8) -> Output(128, 1, 1)
+            nn.AdaptiveAvgPool2d((1, 1))
         )
         
         # Classifier layers
         self.classifier = nn.Sequential(
-            nn.Linear(512 * 14 * 14, 4096),
-            nn.ReLU(inplace=True),
-            nn.Dropout(),
-            nn.Linear(4096, 1024),
-            nn.ReLU(inplace=True),
-            nn.Dropout(),
-            nn.Linear(1024, num_classes)
+            # Flatten the output
+            nn.Flatten(),
+            
+            # First fully connected layer
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            
+            # Second fully connected layer
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            
+            # Output layer
+            nn.Linear(128, num_classes)
         )
         
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass
-        
-        Args:
-            x: Input tensor of shape (batch_size, channels, height, width)
-            
-        Returns:
-            Class predictions
-        """
+    def forward(self, x):
+        # Pass input through feature extraction layers
         x = self.features(x)
-        x = torch.flatten(x, 1)
+        
+        # Pass through classifier layers
         x = self.classifier(x)
         return x
-    
-    def save_model(self, path: str, metadata: Dict = None):
-        """
-        Save model weights and metadata
-        
-        Args:
-            path: Path to save model
-            metadata: Additional metadata to save
-        """
-        save_dict = {
-            'state_dict': self.state_dict(),
-            'metadata': metadata
-        }
-        torch.save(save_dict, path)
-    
-    @classmethod
-    def load_model(cls, path: str, num_classes: int = 10) -> Tuple['FashionClassifier', Dict]:
-        """
-        Load model from file
-        
-        Args:
-            path: Path to model file
-            num_classes: Number of classes
-            
-        Returns:
-            Model instance and metadata
-        """
-        save_dict = torch.load(path)
-        model = cls(num_classes=num_classes)
-        model.load_state_dict(save_dict['state_dict'])
-        return model, save_dict.get('metadata', {})
 
-# Training utilities
-class ModelTrainer:
-    def __init__(self, 
-                 model: FashionClassifier,
-                 criterion: nn.Module,
-                 optimizer: torch.optim.Optimizer,
-                 device: str = 'cuda'):
-        self.model = model
-        self.criterion = criterion
-        self.optimizer = optimizer
-        self.device = device
-        
-    def train_epoch(self, train_loader: torch.utils.data.DataLoader) -> float:
-        """
-        Train for one epoch
-        
-        Args:
-            train_loader: Training data loader
-            
-        Returns:
-            Average loss for epoch
-        """
-        self.model.train()
-        total_loss = 0
-        
-        for batch_idx, (data, target) in enumerate(train_loader):
-            data, target = data.to(self.device), target.to(self.device)
-            
-            self.optimizer.zero_grad()
-            output = self.model(data)
-            loss = self.criterion(output, target)
-            loss.backward()
-            self.optimizer.step()
-            
-            total_loss += loss.item()
-            
-        return total_loss / len(train_loader)
-
-# Example usage
-if __name__ == "__main__":
-    # Initialize model
-    model = FashionClassifier(num_classes=10)
-    
-    # Example forward pass
-    dummy_input = torch.randn(1, 3, 224, 224)
-    output = model(dummy_input)
-    print(f"Output shape: {output.shape}")
+    def initialize_weights(self):
+        """Initialize model weights for better training"""
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, 0, 0.01)
+                nn.init.constant_(m.bias, 0)
