@@ -10,13 +10,14 @@ import numpy as np
 from datetime import datetime
 from tqdm import tqdm
 
-def plot_metrics(train_losses, val_losses, train_accuracies, val_accuracies, save_dir):
-    plt.figure(figsize=(15, 5))
+def plot_metrics(train_losses, val_losses, train_accuracies, val_accuracies, class_accuracies, save_dir):
+    plt.style.use('default')
+    fig = plt.figure(figsize=(20, 10))
     
     # Plot losses
-    plt.subplot(1, 2, 1)
-    plt.plot(train_losses, label='Training Loss', marker='o', linestyle='-', linewidth=2)
-    plt.plot(val_losses, label='Validation Loss', marker='s', linestyle='-', linewidth=2)
+    plt.subplot(2, 2, 1)
+    plt.plot(train_losses, label='Training Loss', marker='o')
+    plt.plot(val_losses, label='Validation Loss', marker='s')
     plt.title('Model Loss', fontsize=12, pad=10)
     plt.xlabel('Epoch', fontsize=10)
     plt.ylabel('Loss', fontsize=10)
@@ -24,14 +25,24 @@ def plot_metrics(train_losses, val_losses, train_accuracies, val_accuracies, sav
     plt.legend(fontsize=10)
 
     # Plot accuracies
-    plt.subplot(1, 2, 2)
-    plt.plot(train_accuracies, label='Training Accuracy', marker='o', linestyle='-', linewidth=2)
-    plt.plot(val_accuracies, label='Validation Accuracy', marker='s', linestyle='-', linewidth=2)
+    plt.subplot(2, 2, 2)
+    plt.plot(train_accuracies, label='Training Accuracy', marker='o')
+    plt.plot(val_accuracies, label='Validation Accuracy', marker='s')
     plt.title('Model Accuracy', fontsize=12, pad=10)
     plt.xlabel('Epoch', fontsize=10)
     plt.ylabel('Accuracy (%)', fontsize=10)
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.legend(fontsize=10)
+
+    # Plot per-class accuracies
+    plt.subplot(2, 1, 2)
+    for class_name, accuracies in class_accuracies.items():
+        plt.plot(accuracies, label=class_name, marker='o')
+    plt.title('Per-class Validation Accuracy', fontsize=12, pad=10)
+    plt.xlabel('Epoch', fontsize=10)
+    plt.ylabel('Accuracy (%)', fontsize=10)
+    plt.grid(True, linestyle='--', alpha=0.7)
+    plt.legend(fontsize=10, bbox_to_anchor=(1.05, 1), loc='upper left')
 
     plt.tight_layout()
     plt.savefig(os.path.join(save_dir, 'training_history.png'), dpi=300, bbox_inches='tight')
@@ -54,12 +65,25 @@ def train_model():
     save_dir = os.path.join('notebooks', 'fashion_classifier_model', f'run_{timestamp}')
     os.makedirs(save_dir, exist_ok=True)
 
-    # Data transforms
+    # Enhanced data transforms
     train_transform = transforms.Compose([
         transforms.ToPILImage(),
         transforms.Resize((128, 128)),
         transforms.RandomHorizontalFlip(p=0.5),
-        transforms.ColorJitter(brightness=0.1, contrast=0.1),
+        transforms.RandomRotation(15),
+        transforms.ColorJitter(
+            brightness=0.2,
+            contrast=0.2,
+            saturation=0.2,
+            hue=0.1
+        ),
+        transforms.RandomAffine(
+            degrees=15,
+            translate=(0.1, 0.1),
+            scale=(0.9, 1.1),
+            shear=10
+        ),
+        transforms.RandomPerspective(distortion_scale=0.2, p=0.5),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
@@ -83,6 +107,17 @@ def train_model():
     for cls, count in class_counts.items():
         print(f"{cls}: {count}")
 
+    # Calculate class weights for balanced training
+    class_weights = []
+    total_samples = sum(class_counts.values())
+    for cls in train_dataset.classes:
+        weight = total_samples / (len(class_counts) * class_counts[cls])
+        if cls == 'Topwear':  # Give extra weight to Topwear
+            weight *= 1.2
+        class_weights.append(weight)
+
+    class_weights = torch.FloatTensor(class_weights).to(device)
+
     # Data loaders
     train_loader = DataLoader(
         train_dataset, 
@@ -100,23 +135,28 @@ def train_model():
     )
 
     # Initialize model
-    model = FashionClassifier(num_classes=len(train_dataset.classes)).to(device)
+    model = FashionClassifier(num_classes=len(train_dataset.classes))
+    model.initialize_weights()
+    model = model.to(device)
 
     # Loss and optimizer
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(
+    criterion = nn.CrossEntropyLoss(weight=class_weights)
+    optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=0.001,
-        weight_decay=0.0001
+        weight_decay=0.01,
+        betas=(0.9, 0.999)
     )
 
     # Learning rate scheduler
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
         optimizer,
-        mode='min',
-        factor=0.1,
-        patience=3,
-        verbose=True
+        max_lr=0.001,
+        epochs=30,
+        steps_per_epoch=len(train_loader),
+        pct_start=0.3,
+        anneal_strategy='cos',
+        final_div_factor=1000
     )
 
     # Training parameters
@@ -125,6 +165,7 @@ def train_model():
     val_losses = []
     train_accuracies = []
     val_accuracies = []
+    class_accuracies = {cls: [] for cls in train_dataset.classes}
     best_val_loss = float('inf')
     patience = 5
     counter = 0
@@ -148,7 +189,12 @@ def train_model():
             outputs = model(images)
             loss = criterion(outputs, labels)
             loss.backward()
+            
+            # Gradient clipping
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            
             optimizer.step()
+            scheduler.step()
 
             running_loss += loss.item()
             _, predicted = torch.max(outputs.data, 1)
@@ -198,18 +244,21 @@ def train_model():
         val_losses.append(val_loss)
         val_accuracies.append(val_accuracy)
 
-        # Update learning rate
-        scheduler.step(val_loss)
+        # Update per-class accuracies
+        for i, cls in enumerate(train_dataset.classes):
+            if class_total[i] > 0:
+                class_acc = 100 * class_correct[i] / class_total[i]
+                class_accuracies[cls].append(class_acc)
 
         # Print results
         print(f"{epoch+1:6d} | {train_loss:10.4f} | {val_loss:8.4f} | "
               f"{train_accuracy:8.2f}% | {val_accuracy:7.2f}%")
 
         print("\nPer-class Validation Accuracy:")
-        for i in range(len(train_dataset.classes)):
+        for i, cls in enumerate(train_dataset.classes):
             if class_total[i] > 0:
                 class_acc = 100 * class_correct[i] / class_total[i]
-                print(f'{train_dataset.classes[i]}: {class_acc:.2f}%')
+                print(f'{cls}: {class_acc:.2f}%')
 
         # Save best model
         if val_loss < best_val_loss:
@@ -219,6 +268,7 @@ def train_model():
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
+                'scheduler_state_dict': scheduler.state_dict(),
                 'val_loss': val_loss,
                 'val_accuracy': val_accuracy,
                 'classes': train_dataset.classes
@@ -234,7 +284,7 @@ def train_model():
         print("-" * 55)
 
     # Plot final metrics
-    plot_metrics(train_losses, val_losses, train_accuracies, val_accuracies, save_dir)
+    plot_metrics(train_losses, val_losses, train_accuracies, val_accuracies, class_accuracies, save_dir)
 
     # Save final metrics
     metrics = {
@@ -242,6 +292,7 @@ def train_model():
         'val_losses': val_losses,
         'train_accuracies': train_accuracies,
         'val_accuracies': val_accuracies,
+        'class_accuracies': class_accuracies,
         'best_val_loss': best_val_loss
     }
     torch.save(metrics, os.path.join(save_dir, 'training_metrics.pth'))

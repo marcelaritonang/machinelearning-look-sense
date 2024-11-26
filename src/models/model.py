@@ -1,64 +1,89 @@
 import torch
 import torch.nn as nn
 
+class AttentionBlock(nn.Module):
+    def __init__(self, in_channels):
+        super(AttentionBlock, self).__init__()
+        self.attention = nn.Sequential(
+            nn.Conv2d(in_channels, in_channels//8, kernel_size=1),
+            nn.BatchNorm2d(in_channels//8),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(in_channels//8, in_channels, kernel_size=1),
+            nn.BatchNorm2d(in_channels),
+            nn.Sigmoid()
+        )
+    
+    def forward(self, x):
+        attention_weights = self.attention(x)
+        return x * attention_weights
+
 class FashionClassifier(nn.Module):
     def __init__(self, num_classes):
         super(FashionClassifier, self).__init__()
         
         # Feature extraction layers
         self.features = nn.Sequential(
-            # Block 1: Input(3, 128, 128) -> Output(32, 64, 64)
-            nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            
-            # Block 2: Input(32, 64, 64) -> Output(64, 32, 32)
-            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1),
+            # Block 1
+            nn.Conv2d(3, 64, kernel_size=3, padding=1),
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            AttentionBlock(64),
             nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Dropout2d(0.1),
             
-            # Block 3: Input(64, 32, 32) -> Output(128, 16, 16)
-            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, padding=1),
+            # Block 2
+            nn.Conv2d(64, 128, kernel_size=3, padding=1),
             nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            
-            # Block 4: Input(128, 16, 16) -> Output(128, 8, 8)
-            nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, padding=1),
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
             nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
+            AttentionBlock(128),
             nn.MaxPool2d(kernel_size=2, stride=2),
-
-            # Global Average Pooling: Input(128, 8, 8) -> Output(128, 1, 1)
+            nn.Dropout2d(0.1),
+            
+            # Block 3
+            nn.Conv2d(128, 256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+            AttentionBlock(256),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Dropout2d(0.1),
+            
+            # Block 4
+            nn.Conv2d(256, 512, kernel_size=3, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(inplace=True),
+            AttentionBlock(512),
             nn.AdaptiveAvgPool2d((1, 1))
         )
         
         # Classifier layers
         self.classifier = nn.Sequential(
-            # Flatten the output
-            nn.Flatten(),
-            
-            # First fully connected layer
-            nn.Linear(128, 256),
-            nn.ReLU(),
             nn.Dropout(0.3),
-            
-            # Second fully connected layer
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.BatchNorm1d(256),
+            nn.Dropout(0.3),
             nn.Linear(256, 128),
             nn.ReLU(),
+            nn.BatchNorm1d(128),
             nn.Dropout(0.3),
-            
-            # Output layer
             nn.Linear(128, num_classes)
         )
         
     def forward(self, x):
-        # Pass input through feature extraction layers
         x = self.features(x)
-        
-        # Pass through classifier layers
+        x = torch.flatten(x, 1)
         x = self.classifier(x)
         return x
 
