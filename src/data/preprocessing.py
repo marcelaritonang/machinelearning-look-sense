@@ -76,7 +76,7 @@ class FashionDataset(Dataset):
             img = img[y:y+new_height, x:x+new_width]
             img = cv2.resize(img, (width, height))
         
-        # Common augmentations
+        
         # Brightness and contrast
         alpha = random.uniform(0.8, 1.2)
         beta = random.uniform(-10, 10)
@@ -85,8 +85,8 @@ class FashionDataset(Dataset):
         # Color jittering
         if random.random() > 0.5:
             img = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
-            img[:,:,1] = img[:,:,1] * random.uniform(0.8, 1.2)  # Saturation
-            img[:,:,2] = img[:,:,2] * random.uniform(0.8, 1.2)  # Value
+            img[:,:,1] = img[:,:,1] * random.uniform(0.8, 1.2)
+            img[:,:,2] = img[:,:,2] * random.uniform(0.8, 1.2)  
             img = cv2.cvtColor(img, cv2.COLOR_HSV2RGB)
             
         return img
@@ -105,12 +105,12 @@ class FashionDataset(Dataset):
             
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             
-            # Apply enhanced augmentation with higher probability for target classes
+            
             class_name = self.classes[label]
             if class_name in ['Bottomwear', 'Headwear']:
-                if random.random() > 0.3:  # 70% chance
+                if random.random() > 0.3:  # 70% 
                     img = self.apply_enhanced_augmentation(img, class_name)
-            elif random.random() > 0.5:  # 50% chance for other classes
+            elif random.random() > 0.5:  # 50%
                 img = self.apply_enhanced_augmentation(img, class_name)
             
             if self.transform:
