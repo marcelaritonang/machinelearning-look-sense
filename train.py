@@ -152,7 +152,7 @@ def train_model():
     scheduler = torch.optim.lr_scheduler.OneCycleLR(
         optimizer,
         max_lr=0.001,
-        epochs=30,
+        epochs=50,
         steps_per_epoch=len(train_loader),
         pct_start=0.3,
         anneal_strategy='cos',
@@ -160,7 +160,7 @@ def train_model():
     )
 
     # Training parameters
-    num_epochs = 30
+    num_epochs = 50
     train_losses = []
     val_losses = []
     train_accuracies = []

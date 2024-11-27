@@ -21,7 +21,7 @@ class FashionClassifier(nn.Module):
     def __init__(self, num_classes):
         super(FashionClassifier, self).__init__()
         
-        # Feature extraction layers
+        
         self.features = nn.Sequential(
             # Block 1
             nn.Conv2d(3, 64, kernel_size=3, padding=1),
