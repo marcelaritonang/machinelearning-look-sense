@@ -1,0 +1,7 @@
+Bags
+Bottomwear
+Dress
+Headwear
+Shoes
+Topwear
+Watches

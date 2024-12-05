@@ -25,7 +25,7 @@ def convert_pth_to_onnx(pth_path, onnx_path):
     
     # Create dummy input
     print("Creating dummy input...")
-    x = torch.randn(1, 3, 128, 128)  # Match your training input size
+    x = torch.randn(1, 3, 177, 177)  # Match your training input size
     
     # Export to ONNX
     print("Converting to ONNX...")
@@ -62,8 +62,8 @@ def convert_pth_to_onnx(pth_path, onnx_path):
 
 if __name__ == "__main__":
     pth_path = os.path.join(project_root, "notebooks", "fashion_classifier_model", 
-                           "run_20241127_235135", "best_model.pth")
-    onnx_path = os.path.join(project_root, "converted_models", "model.onnx")
+                           "run_20241130_033009", "best_model.pth")
+    onnx_path = os.path.join(project_root, "converted_models", "model-1.onnx")
     
     print(f"PTH path exists: {os.path.exists(pth_path)}")
     
@@ -73,7 +73,7 @@ if __name__ == "__main__":
         print(f"Classes: {classes}")
         
         # Save class names
-        classes_path = os.path.join(project_root, "converted_models", "classes.txt")
+        classes_path = os.path.join(project_root, "converted_models", "classes-1.txt")
         with open(classes_path, 'w') as f:
             f.write('\n'.join(classes))
             
