@@ -68,7 +68,7 @@ def train_model():
     # Enhanced data transforms
     train_transform = transforms.Compose([
         transforms.ToPILImage(),
-        transforms.Resize((128, 128)),
+        transforms.Resize((177, 177)),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomRotation(15),
         transforms.ColorJitter(
@@ -90,14 +90,14 @@ def train_model():
 
     val_transform = transforms.Compose([
         transforms.ToPILImage(),
-        transforms.Resize((128, 128)),
+        transforms.Resize((177, 177)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
     # Load datasets
-    train_dataset = FashionDataset('Dataset', transform=train_transform, samples_per_class=200)
-    val_dataset = FashionDataset('Dataset', transform=val_transform, samples_per_class=200)
+    train_dataset = FashionDataset('Dataset', transform=train_transform, samples_per_class=250)
+    val_dataset = FashionDataset('Dataset', transform=val_transform, samples_per_class=250)
 
     print(f"\nTotal samples: {len(train_dataset)}")
     print(f"Classes: {train_dataset.classes}")
